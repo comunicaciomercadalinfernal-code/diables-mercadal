@@ -12,7 +12,7 @@
 body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt)}
 header{background:var(--red);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
 .brand{display:flex;align-items:center;gap:10px}
-.brand img{height:clamp(44px,9vw,64px);width:auto;display:block}
+.brand img{height:clamp(44px,9vw,64px);width:auto;display:block;filter:brightness(0) invert(1)}
 .brand h1{font-size:1.15rem;margin:0}
 nav{display:flex;gap:6px;flex-wrap:wrap}
 nav button{background:transparent;border:1px solid #fff8;color:#fff;padding:6px 12px;border-radius:999px;cursor:pointer;font:inherit}
@@ -53,7 +53,7 @@ a{color:var(--red)}
 <body>
 <header>
   <div class="brand">
-    <img src="DMI_Logo_Blanc.png" alt="Diables del Mercadal Infernal">
+    <img src="DMI_Logo_Blanc.png" alt="Diables del Mercadal Infernal" onerror="this.style.display='none'">
     <h1>Diables del Mercadal Infernal</h1>
   </div>
   <nav>
@@ -125,6 +125,38 @@ a{color:var(--red)}
         <button class="ghost" type="button" onclick="toggleReg()">Vull inscriure'm</button>
       </div>
       <p class="msg" id="login-msg"></p>
+      <p style="margin-top:12px"><a href="#" onclick="showRecover();return false">He oblidat la contrasenya</a></p>
+    </form>
+  </div>
+
+  <!-- Recuperar contrasenya: primer el correu -->
+  <div id="recover-box" class="card hidden">
+    <h2>Recuperar la contrasenya</h2>
+    <p class="muted">Introdueix el correu amb què t'has inscrit. Et enviarem un enllaç per triar una contrasenya nova.</p>
+    <form id="rec-form" onsubmit="recover(event)">
+      <div class="grid">
+        <div><label>Correu electrònic</label><input type="email" id="rec-email" required autocomplete="email"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" type="submit">Enviar enllaç</button>
+        <button class="ghost" type="button" onclick="hideRecover()">Tornar</button>
+      </div>
+      <p class="msg" id="rec-msg"></p>
+    </form>
+  </div>
+
+  <!-- Triar contrasenya nova (apareix en obrir l'enllaç del correu) -->
+  <div id="newpass-box" class="card hidden">
+    <h2>Nova contrasenya</h2>
+    <form id="np-form" onsubmit="setNewPass(event)">
+      <div class="grid">
+        <div><label>Contrasenya nova (mín. 6 caràcters)</label><input type="password" name="p1" required minlength="6" autocomplete="new-password"></div>
+        <div><label>Repeteix la contrasenya</label><input type="password" name="p2" required minlength="6" autocomplete="new-password"></div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="primary" type="submit">Desar contrasenya</button>
+      </div>
+      <p class="msg" id="np-msg"></p>
     </form>
   </div>
 
@@ -179,7 +211,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const ROLS = ["Diable","Tabaler/a","Grifó diable","Grifó tabaler/a","Staff","Grifó staff"];
 const CARRECS = ["Secretaria","Tresoreria","Presidència","Cap de colla","Cap de tabalers"];
 const COMISSIONS = ["Comunicació"];
-const S = { user:null, me:null, admin:false, events:[], rsvp:[], members:[], fotos:{} };
+const S = { user:null, me:null, admin:false, recovering:false, events:[], rsvp:[], members:[], fotos:{} };
 
 // ---------- utilitats ----------
 const fotoUrl = id => S.fotos[id] ? sb.storage.from("colla_fotos").getPublicUrl(S.fotos[id]).data.publicUrl : "";
@@ -250,6 +282,31 @@ function go(t){
   });
 }
 function toggleReg(){ $("reg-box").classList.toggle("hidden"); }
+function showRecover(){ $("recover-box").classList.remove("hidden"); $("login-box").classList.add("hidden"); }
+function hideRecover(){ $("recover-box").classList.add("hidden"); $("login-box").classList.remove("hidden"); $("rec-msg").textContent = ""; }
+
+async function recover(e){
+  e.preventDefault();
+  const email = $("rec-email").value.trim();
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split("#")[0] });
+  $("rec-msg").textContent = error
+    ? "No s'ha pogut enviar el correu: " + error.message
+    : "Si el correu està inscrit, t'hem enviat un enllaç per canviar la contrasenya. Revisa també la carpeta de correu brossa.";
+}
+
+async function setNewPass(e){
+  e.preventDefault();
+  const f = $("np-form"), msg = $("np-msg");
+  if (f.p1.value.length < 6) return msg.textContent = "La contrasenya ha de tenir almenys 6 caràcters.";
+  if (f.p1.value !== f.p2.value) return msg.textContent = "Les dues contrasenyes no coincideixen.";
+  const { error } = await sb.auth.updateUser({ password: f.p1.value });
+  if (error) return msg.textContent = "No s'ha pogut canviar la contrasenya: " + error.message;
+  S.recovering = false;
+  f.reset(); msg.textContent = "";
+  $("newpass-box").classList.add("hidden");
+  alert("Contrasenya canviada. Ja pots fer servir la nova.");
+  renderAll();
+}
 
 // ---------- sessió ----------
 async function loadMe(){
@@ -479,8 +536,9 @@ async function saveMem(e){
 
 // ---------- pintar ----------
 function renderAll(){
-  $("logged").classList.toggle("hidden", !S.user);
-  $("login-box").classList.toggle("hidden", !!S.user);
+  $("logged").classList.toggle("hidden", !S.user || S.recovering);
+  const recOpen = !$("recover-box").classList.contains("hidden");
+  $("login-box").classList.toggle("hidden", !!S.user || recOpen);
   if (!S.user) $("reg-box").classList.add("hidden");
   if (S.user) {
     $("who").textContent = S.me ? (S.me.nom + " " + S.me.cognoms) : S.user.email;
@@ -497,7 +555,15 @@ function renderAll(){
 (async () => {
   $("reg-fields").innerHTML = memberFields();
   $("mem-fields").innerHTML = memberFields();
-  sb.auth.onAuthStateChange(async (_e, session) => { S.user = session?.user || null; await loadMe(); });
+  sb.auth.onAuthStateChange(async (ev, session) => {
+    if (ev === "PASSWORD_RECOVERY") {
+      S.recovering = true;
+      $("newpass-box").classList.remove("hidden");
+      go("c");
+    }
+    S.user = session?.user || null;
+    await loadMe();
+  });
   const { data } = await sb.auth.getSession();
   S.user = data.session?.user || null;
   await loadMe();
