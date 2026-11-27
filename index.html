@@ -45,6 +45,7 @@ th{color:var(--muted);font-weight:600;font-size:.8rem}
 .tag.r{background:var(--red);color:#fff}
 .muted{color:var(--muted);font-size:.88rem}
 .msg{color:var(--red);font-size:.9rem;margin-top:8px}
+.ok{color:#1d7a3a;font-weight:600;font-size:.9rem}
 .stat{text-align:center;padding:10px}
 .stat b{display:block;font-size:1.4rem;color:var(--red)}
 .av{width:36px;height:36px;border-radius:50%;object-fit:cover;vertical-align:middle;background:var(--line);display:inline-block}
@@ -117,6 +118,19 @@ a{color:var(--red)}
       </div>
       <p class="msg" id="foto-msg"></p>
     </div>
+  </div>
+
+  <div id="mydata-box" class="card hidden">
+    <h2>Les meves dades</h2>
+    <form id="my-form" onsubmit="saveMyData(event)">
+      <div id="my-fields"></div>
+      <h3>Càrrecs i comissions</h3>
+      <p class="muted" id="my-roles"></p>
+      <div class="row" style="margin-top:14px">
+        <button class="primary" type="submit">Desar les meves dades</button>
+      </div>
+      <p class="msg" id="my-msg"></p>
+    </form>
   </div>
 
   <div id="login-box" class="card">
@@ -217,7 +231,8 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt
 const ROLS = ["Diable","Tabaler/a","Staff","Grifó diable","Grifó tabaler/a","Grifó staff"];
 const CARRECS = ["Secretaria","Tresoreria","Presidència","Cap de colla","Cap de tabalers"];
 const COMISSIONS = ["Comunicació"];
-const S = { user:null, me:null, admin:false, recovering:false, events:[], rsvp:[], members:[], fotos:{}, rolSel:{} };
+const S = { user:null, me:null, admin:false, recovering:false, events:[], rsvp:[], members:[], fotos:{},
+            sel:{}, saved:{} };
 
 // ---------- utilitats ----------
 const fotoUrl = id => S.fotos[id] ? sb.storage.from("colla_fotos").getPublicUrl(S.fotos[id]).data.publicUrl : "";
@@ -227,7 +242,9 @@ const isPotser = r => r.estat === "potser";
 const chk = (name, label) => `<label class="chk"><input type="checkbox" name="${name}"> ${label}</label>`;
 const clean = o => Object.fromEntries(Object.entries(o).map(([k,v]) => [k, v === "" ? null : v]));
 
-function memberFields(){
+// opt.inscripcio: mostra la data d'inscripció · opt.carrecs: mostra càrrecs i comissions editables
+function memberFields(opt = {}){
+  const inscripcio = opt.inscripcio !== false, carrecs = opt.carrecs !== false;
   return `
   <div class="grid">
     <div><label>Nom *</label><input type="text" name="nom" required></div>
@@ -237,7 +254,7 @@ function memberFields(){
     <div style="grid-column:1/-1"><label>Adreça</label><input type="text" name="adreca"></div>
     <div><label>Codi postal</label><input type="text" name="cp" inputmode="numeric"></div>
     <div><label>Ciutat</label><input type="text" name="ciutat"></div>
-    <div><label>Data d'inscripció</label><input type="date" name="inscripcio"></div>
+    ${inscripcio ? `<div><label>Data d'inscripció</label><input type="date" name="inscripcio"></div>` : ""}
   </div>
   <h3>Autoritzacions</h3>
   <div class="checks">${chk("aut_menor","Autorització menor")}${chk("aut_imatge","Autorització drets d'imatge")}</div>
@@ -248,15 +265,19 @@ function memberFields(){
     <label class="chk"><input type="checkbox" name="diable" onchange="syncTodas(this.form)"> Diable</label>
     <label class="chk"><input type="checkbox" name="tabaler" onchange="syncTodas(this.form)"> Tabaler/a</label>
     <label class="chk"><input type="checkbox" name="griu" onchange="syncTodas(this.form)"> Grifó</label>
-    <label class="chk"><input type="checkbox" id="todas" onchange="setTodas(this.form,this.checked)"> Totes les anteriors</label>
+    <label class="chk"><input type="checkbox" class="todas" onchange="setTodas(this.form,this.checked)"> Totes les anteriors</label>
   </div>
+  ${carrecs ? `
   <h3>Càrrecs de colla</h3>
   <div class="checks">${CARRECS.map(c => `<label class="chk"><input type="checkbox" name="carrec" value="${c}"> ${c}</label>`).join("")}</div>
   <h3>Comissions</h3>
-  <div class="checks">${COMISSIONS.map(c => `<label class="chk"><input type="checkbox" name="comissio" value="${c}"> ${c}</label>`).join("")}</div>`;
+  <div class="checks">${COMISSIONS.map(c => `<label class="chk"><input type="checkbox" name="comissio" value="${c}"> ${c}</label>`).join("")}</div>` : ""}`;
 }
 function setTodas(f, on){ ["diable","tabaler","griu"].forEach(n => f.elements[n].checked = on); }
-function syncTodas(f){ $("todas").checked = ["diable","tabaler","griu"].every(n => f.elements[n].checked); }
+function syncTodas(f){
+  const t = f.querySelector(".todas");
+  if (t) t.checked = ["diable","tabaler","griu"].every(n => f.elements[n].checked);
+}
 
 function readForm(f){
   const g = n => (f.elements[n]?.value || "").trim();
@@ -275,7 +296,7 @@ function fill(f, m){
     if (i.type === "checkbox") {
       if (i.name === "carrec") i.checked = (m.carrecs||[]).includes(i.value);
       else if (i.name === "comissio") i.checked = (m.comissions||[]).includes(i.value);
-      else if (i.id === "todas") i.checked = !!(m.diable && m.tabaler && m.griu);
+      else if (i.classList.contains("todas")) i.checked = !!(m.diable && m.tabaler && m.griu);
       else i.checked = !!m[i.name];
     } else i.value = m[i.name] ?? "";
   });
@@ -328,6 +349,7 @@ async function loadMe(){
     }
     S.me = data;
     S.admin = !!(data?.is_admin && data?.aprovat);
+    if (S.me) fill($("my-form"), S.me);
   }
   $("t-m").classList.toggle("hidden", !S.admin);
   await Promise.all([loadEvents(), loadRsvp(), loadFotos(), S.admin ? loadMembers() : null]);
@@ -354,6 +376,20 @@ async function signup(e){
   if (error) return msg.textContent = "No s'ha pogut fer la inscripció: " + error.message;
   f.reset();
   msg.textContent = "Inscripció enviada. Un administrador la revisarà i després podràs entrar amb el teu correu i la contrasenya.";
+}
+
+// El membre desa les seves dades. No pot tocar la data d'inscripció, els càrrecs ni les comissions.
+async function saveMyData(e){
+  e.preventDefault();
+  const msg = $("my-msg");
+  const data = readForm($("my-form"));
+  delete data.inscripcio;
+  delete data.carrecs;
+  delete data.comissions;
+  const { error } = await sb.from("colla_members").update(data).eq("id", S.me.id);
+  if (error) return msg.textContent = "No s'han pogut desar: " + error.message;
+  msg.textContent = "Dades desades ✔";
+  await loadMe();
 }
 
 async function pujarFoto(file){
@@ -395,20 +431,31 @@ async function delEv(id){
   await loadEvents(); renderAll();
 }
 
-// El membre tria primer com a vindrà (rol) i després l'assistència
+// Selecció pendent (encara no desada). Només es desa en prémer CONFIRMAR.
+function mineRsvp(eid){ return S.me ? S.rsvp.find(r => r.event_id === eid && r.member_id === S.me.id) : null; }
+function selFor(eid){
+  if (S.sel[eid]) return S.sel[eid];
+  const m = mineRsvp(eid);
+  return { rol: m?.rol || "", estat: m ? (m.estat || (m.vindre ? "vindre" : "")) : "" };
+}
 function setRol(eid, rol){
-  S.rolSel[eid] = rol;
+  S.sel[eid] = { ...selFor(eid), rol }; delete S.saved[eid];
   renderEvents();
 }
-async function rsvp(eid, estat){
-  const mine = S.rsvp.find(r => r.event_id === eid && r.member_id === S.me.id);
-  const rol = S.rolSel[eid] ?? mine?.rol ?? null;
+function setEstat(eid, estat){
+  S.sel[eid] = { ...selFor(eid), estat }; delete S.saved[eid];
+  renderEvents();
+}
+async function confirmRsvp(eid){
+  const { rol, estat } = selFor(eid);
+  if (!estat) return alert("Tria una opció: Vindré, Potser o No vindré.");
   if (estat !== "no" && !rol) return alert("Primer tria com a vindries: Diable, Tabaler/a, Staff, Grifó diable, Grifó tabaler/a o Grifó staff.");
   const { error } = await sb.from("colla_rsvp").upsert({ event_id:eid, member_id:S.me.id,
     nom:(S.me.nom + " " + S.me.cognoms), estat, rol: estat === "no" ? null : rol },
     { onConflict:"event_id,member_id" });
   if (error) return alert("No s'ha pogut desar la resposta: " + error.message);
-  delete S.rolSel[eid];
+  delete S.sel[eid];
+  S.saved[eid] = "Resposta confirmada i desada a la base de dades ✔";
   await loadRsvp(); renderAll();
 }
 
@@ -424,6 +471,8 @@ async function loadFotos(){
   const { data } = await sb.from("colla_fotos").select("*");
   S.fotos = Object.fromEntries((data || []).map(x => [x.member_id, x.path]));
 }
+
+const ESTAT_TXT = { vindre:"Vindré", potser:"Potser", no:"No vindré" };
 
 function renderEvents(){
   const d0 = new Date(), hoy = d0.getFullYear() + "-" + String(d0.getMonth()+1).padStart(2,"0") + "-" + String(d0.getDate()).padStart(2,"0");
@@ -443,9 +492,10 @@ function renderEvents(){
     const v = S.rsvp.filter(r => r.event_id === e.id && isVindre(r));
     const p = S.rsvp.filter(r => r.event_id === e.id && isPotser(r));
     const n = S.rsvp.filter(r => r.event_id === e.id && r.estat === "no");
-    const mine = S.me ? S.rsvp.find(r => r.event_id === e.id && r.member_id === S.me.id) : null;
-    const est = mine ? mine.estat : "";
-    const rolActual = S.rolSel[e.id] ?? mine?.rol ?? "";
+    const mine = mineRsvp(e.id);
+    const sel = selFor(e.id);
+    const pendent = !!S.sel[e.id];
+    const guardat = mine ? `${ESTAT_TXT[mine.estat] || ""}${mine.rol ? " com a " + mine.rol : ""}` : "";
     return `
     <div class="card ev">
       <div class="row" style="justify-content:space-between">
@@ -460,13 +510,20 @@ function renderEvents(){
       <div class="rsvp">
         <strong>1. Com a:</strong>
         <div class="row" style="margin-top:6px">
-          ${ROLS.map(o => `<button type="button" class="chip ${rolActual === o ? "on" : ""}" onclick="setRol('${e.id}','${esc(o)}')">${esc(o)}</button>`).join("")}
+          ${ROLS.map(o => `<button type="button" class="chip ${sel.rol === o ? "on" : ""}" onclick="setRol('${e.id}','${esc(o)}')">${esc(o)}</button>`).join("")}
         </div>
         <strong style="display:block;margin-top:12px">2. Vindràs?</strong>
         <div class="row" style="margin-top:6px">
-          <button type="button" class="resp ${est === "vindre" ? "on" : ""}" onclick="rsvp('${e.id}','vindre')">✅ VINDRÉ</button>
-          <button type="button" class="resp ${est === "potser" ? "on" : ""}" onclick="rsvp('${e.id}','potser')">🤔 POTSER</button>
-          <button type="button" class="resp ${est === "no" ? "on" : ""}" onclick="rsvp('${e.id}','no')">❌ NO VINDRÉ</button>
+          <button type="button" class="resp ${sel.estat === "vindre" ? "on" : ""}" onclick="setEstat('${e.id}','vindre')">✅ VINDRÉ</button>
+          <button type="button" class="resp ${sel.estat === "potser" ? "on" : ""}" onclick="setEstat('${e.id}','potser')">🤔 POTSER</button>
+          <button type="button" class="resp ${sel.estat === "no" ? "on" : ""}" onclick="setEstat('${e.id}','no')">❌ NO VINDRÉ</button>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <button type="button" class="primary" onclick="confirmRsvp('${e.id}')">✔ CONFIRMAR</button>
+          ${pendent ? `<span class="msg">Canvis sense confirmar</span>`
+            : S.saved[e.id] ? `<span class="ok">${esc(S.saved[e.id])}</span>`
+            : guardat ? `<span class="muted">La teva resposta guardada: ${esc(guardat)}</span>`
+            : `<span class="muted">Encara no has respost.</span>`}
         </div>
       </div>` : `<p class="muted" style="margin-top:8px"><a href="#" onclick="go('c');return false">Inicia sessió</a> per confirmar si vindràs.</p>`}
     </div>`;
@@ -554,6 +611,11 @@ function renderAll(){
   const recOpen = !$("recover-box").classList.contains("hidden");
   $("login-box").classList.toggle("hidden", !!S.user || recOpen);
   if (!S.user) $("reg-box").classList.add("hidden");
+  $("mydata-box").classList.toggle("hidden", !S.me || S.recovering);
+  if (S.me) {
+    const rols = [...(S.me.carrecs||[]), ...(S.me.comissions||[])];
+    $("my-roles").innerHTML = rols.length ? rols.map(x => `<span class="tag r">${esc(x)}</span>`).join("") : "Cap càrrec assignat.";
+  }
   if (S.user) {
     $("who").textContent = S.me ? (S.me.nom + " " + S.me.cognoms) : S.user.email;
     $("foto-box").classList.toggle("hidden", !S.me);
@@ -566,8 +628,9 @@ function renderAll(){
 
 // ---------- inici ----------
 (async () => {
-  $("reg-fields").innerHTML = memberFields();
-  $("mem-fields").innerHTML = memberFields();
+  $("reg-fields").innerHTML = memberFields({ inscripcio:true, carrecs:false });
+  $("my-fields").innerHTML = memberFields({ inscripcio:false, carrecs:false });
+  $("mem-fields").innerHTML = memberFields({ inscripcio:true, carrecs:true });
   sb.auth.onAuthStateChange(async (ev, session) => {
     if (ev === "PASSWORD_RECOVERY") {
       S.recovering = true;
