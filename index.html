@@ -790,8 +790,8 @@ function renderAll(){
       $("newpass-box").classList.remove("hidden");
       go("c");
     }
-    S.user = session?.user || null;
-    await loadMe();
+        S.user = session?.user || null;
+    setTimeout(loadMe, 0);
   });
   const { data } = await sb.auth.getSession();
   S.user = data.session?.user || null;
