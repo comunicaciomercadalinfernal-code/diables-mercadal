@@ -9,7 +9,35 @@
 :root{--red:#b3261e;--red-d:#7f1a14;--bg:#faf7f5;--card:#fff;--txt:#222;--muted:#666;--line:#e3dcd8}
 @media (prefers-color-scheme: dark){:root{--bg:#1b1718;--card:#262021;--txt:#f2ecea;--muted:#aaa;--line:#3d3436}}
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt)}
+<style>
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:44px!important}
+.pw-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:transparent;border:0;cursor:pointer;padding:6px;color:var(--muted);line-height:0}
+.pw-btn svg{width:20px;height:20px}
+</style>
+<script>
+(function(){
+  const eye = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const eyeOff = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 19c-7 0-11-7-11-7a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 7 11 7a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/><path d="M14.12 14.12a3 3 0 11-4.24-4.24"/></svg>';
+  document.querySelectorAll('input[type=password]').forEach(inp => {
+    const wrap = document.createElement('div');
+    wrap.className = 'pw-wrap';
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(inp);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pw-btn';
+    btn.setAttribute('aria-label', 'Mostra o amaga la contrasenya');
+    btn.innerHTML = eye;
+    btn.onclick = () => {
+      const oculta = inp.type === 'password';
+      inp.type = oculta ? 'text' : 'password';
+      btn.innerHTML = oculta ? eyeOff : eye;
+    };
+    wrap.appendChild(btn);
+  });
+})();
+</script>body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt)}
 header{background:var(--red);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
 .brand{display:flex;align-items:center;gap:10px}
 .brand img{height:clamp(44px,9vw,64px);width:auto;display:block;filter:brightness(0) invert(1)}
