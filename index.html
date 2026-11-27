@@ -25,7 +25,7 @@ h3{margin:14px 0 6px;font-size:.9rem;color:var(--muted);text-transform:uppercase
 .ev h3{color:var(--txt);text-transform:none;font-size:1.05rem;margin:0 0 4px}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
 label{display:block;font-size:.85rem;color:var(--muted)}
-input[type=text],input[type=email],input[type=password],input[type=date],input[type=time],input[type=url],select{width:100%;padding:8px;margin-top:3px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font:inherit}
+input[type=text],input[type=email],input[type=password],input[type=date],input[type=time],input[type=url],input[type=tel],select{width:100%;padding:8px;margin-top:3px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--txt);font:inherit}
 input[type=file]{margin-top:3px;font:inherit;color:var(--txt)}
 .chk{display:flex;align-items:center;gap:6px;font-size:.92rem;color:var(--txt);margin:4px 0}
 .chk input{width:18px;height:18px;accent-color:var(--red)}
@@ -254,6 +254,7 @@ function memberFields(opt = {}){
     <div style="grid-column:1/-1"><label>Adreça</label><input type="text" name="adreca"></div>
     <div><label>Codi postal</label><input type="text" name="cp" inputmode="numeric"></div>
     <div><label>Ciutat</label><input type="text" name="ciutat"></div>
+    <div><label>Telèfon</label><input type="tel" name="telefon" inputmode="tel" autocomplete="tel"></div>
     ${inscripcio ? `<div><label>Data d'inscripció</label><input type="date" name="inscripcio"></div>` : ""}
   </div>
   <h3>Autoritzacions</h3>
@@ -284,7 +285,7 @@ function readForm(f){
   const ck = n => !!f.elements[n]?.checked;
   const many = n => [...f.querySelectorAll(`[name="${n}"]:checked`)].map(x => x.value);
   return clean({ nom:g("nom"), cognoms:g("cognoms"), malnom:g("malnom"), data_naixement:g("data_naixement"),
-    adreca:g("adreca"), cp:g("cp"), ciutat:g("ciutat"), inscripcio:g("inscripcio"),
+    adreca:g("adreca"), cp:g("cp"), ciutat:g("ciutat"), telefon:g("telefon"), inscripcio:g("inscripcio"),
     aut_menor:ck("aut_menor"), aut_imatge:ck("aut_imatge"), cre:ck("cre"), rgcre:ck("rgcre"),
     diable:ck("diable"), tabaler:ck("tabaler"), griu:ck("griu"),
     carrecs:many("carrec"), comissions:many("comissio") });
@@ -567,7 +568,7 @@ function renderMembers(){
   const aprov = S.members.filter(m => m.aprovat);
   $("pend-list").innerHTML = pend.length ? pend.map(m => `
     <div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:6px 0">
-      <span class="row">${avatar(m.id)} <span><strong>${esc(m.nom)} ${esc(m.cognoms)}</strong> · ${esc(m.username)} · ${esc(m.ciutat)}</span></span>
+      <span class="row">${avatar(m.id)} <span><strong>${esc(m.nom)} ${esc(m.cognoms)}</strong> · ${esc(m.username)} · ${esc(m.ciutat)}${m.telefon ? " · " + esc(m.telefon) : ""}</span></span>
       <span class="row"><button class="primary" onclick="aprovar('${m.id}')">Aprovar</button>
         <button class="ghost danger" onclick="rebutjar('${m.id}')">Rebutjar</button></span>
     </div>`).join("") : "<p class='muted'>Cap inscripció pendent.</p>";
@@ -578,7 +579,8 @@ function renderMembers(){
     <tbody>${aprov.map(m => `<tr>
       <td>${avatar(m.id)}</td>
       <td><strong>${esc(m.nom)} ${esc(m.cognoms)}</strong>${m.malnom ? ` “${esc(m.malnom)}”` : ""}
-          <div class="muted">${esc(m.username)} · ${esc(m.data_naixement)} · ${esc(m.adreca)}</div></td>
+          <div class="muted">${esc(m.username)} · ${esc(m.data_naixement)} · ${esc(m.adreca)}</div>
+          <div class="muted">📞 ${esc(m.telefon) || "—"}</div></td>
       <td>${esc(m.cp)} ${esc(m.ciutat)}</td>
       <td>${esc(secio(m))}</td>
       <td>${[...(m.carrecs||[]), ...(m.comissions||[])].map(x => `<span class="tag r">${esc(x)}</span>`).join("") || "—"}</td>
