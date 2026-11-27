@@ -33,6 +33,9 @@ input[type=file]{margin-top:3px;font:inherit;color:var(--txt)}
 button.primary{background:var(--red);color:#fff;border:0;padding:9px 16px;border-radius:8px;cursor:pointer;font:inherit;font-weight:600;min-height:40px}
 button.ghost{background:transparent;color:var(--red);border:1px solid var(--red);padding:6px 10px;border-radius:8px;cursor:pointer;font:inherit;min-height:36px}
 button.danger{color:#b3261e;border-color:#b3261e}
+.chip,.resp{background:transparent;border:1px solid var(--red);color:var(--red);padding:8px 14px;border-radius:999px;cursor:pointer;font:inherit;min-height:40px}
+.chip.on,.resp.on{background:var(--red);color:#fff;font-weight:600}
+.resp{font-size:.95rem}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .rsvp{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 table{width:100%;border-collapse:collapse;font-size:.9rem}
@@ -106,7 +109,6 @@ a{color:var(--red)}
       <span>Hola, <strong id="who"></strong>.</span>
       <button class="ghost" onclick="logout()">Sortir</button>
     </div>
-    <p id="pending" class="msg hidden">La teva inscripció està pendent d'aprovació per part de l'administració.</p>
     <div id="foto-box" class="hidden" style="margin-top:12px">
       <h3>La teva foto de perfil</h3>
       <div class="row">
@@ -166,7 +168,7 @@ a{color:var(--red)}
 
   <div id="reg-box" class="card hidden">
     <h2>Inscripció</h2>
-    <p class="muted">Rebràs un correu de validació. Fes clic a l'enllaç i després entra amb el teu correu i la contrasenya. Un administrador haurà d'aprovar la teva inscripció.</p>
+    <p class="muted">Omple les teves dades. Un administrador revisarà la inscripció i després podràs entrar amb el teu correu i la contrasenya.</p>
     <form id="reg-form" onsubmit="signup(event)">
       <div class="grid">
         <div><label>Correu electrònic *</label><input type="email" name="email" required autocomplete="email"></div>
@@ -212,10 +214,10 @@ const sb = supabase.createClient(SB_URL, SB_KEY);
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const ROLS = ["Diable","Tabaler/a","Grifó diable","Grifó tabaler/a","Staff","Grifó staff"];
+const ROLS = ["Diable","Tabaler/a","Staff","Grifó","Grifó staff"];
 const CARRECS = ["Secretaria","Tresoreria","Presidència","Cap de colla","Cap de tabalers"];
 const COMISSIONS = ["Comunicació"];
-const S = { user:null, me:null, admin:false, recovering:false, events:[], rsvp:[], members:[], fotos:{} };
+const S = { user:null, me:null, admin:false, recovering:false, events:[], rsvp:[], members:[], fotos:{}, rolSel:{} };
 
 // ---------- utilitats ----------
 const fotoUrl = id => S.fotos[id] ? sb.storage.from("colla_fotos").getPublicUrl(S.fotos[id]).data.publicUrl : "";
@@ -336,7 +338,7 @@ async function login(e){
   e.preventDefault();
   const f = $("login-form");
   const { error } = await sb.auth.signInWithPassword({ email:f.email.value.trim(), password:f.password.value });
-  $("login-msg").textContent = error ? "Correu o contrasenya incorrectes, o encara no has validat el correu." : "";
+  $("login-msg").textContent = error ? "Correu o contrasenya incorrectes." : "";
   if (!error) f.reset();
 }
 async function logout(){ await sb.auth.signOut(); }
@@ -351,7 +353,7 @@ async function signup(e){
     options:{ data:{ perfil }, emailRedirectTo: location.href.split("#")[0] } });
   if (error) return msg.textContent = "No s'ha pogut fer la inscripció: " + error.message;
   f.reset();
-  msg.textContent = "T'hem enviat un correu de validació. Obre'l i fes clic a l'enllaç. Després podràs entrar amb el teu correu i la contrasenya.";
+  msg.textContent = "Inscripció enviada. Un administrador la revisarà i després podràs entrar amb el teu correu i la contrasenya.";
 }
 
 async function pujarFoto(file){
@@ -392,14 +394,21 @@ async function delEv(id){
   await sb.from("colla_events").delete().eq("id", id);
   await loadEvents(); renderAll();
 }
-async function rsvp(eid){
-  const estat = document.querySelector(`input[name="est-${eid}"]:checked`)?.value;
-  if (!estat) return alert("Tria una opció: Vindré, Potser o No vindré.");
-  const rol = $("rs-" + eid).value;
+
+// El membre tria primer com a vindrà (rol) i després l'assistència
+function setRol(eid, rol){
+  S.rolSel[eid] = rol;
+  renderEvents();
+}
+async function rsvp(eid, estat){
+  const mine = S.rsvp.find(r => r.event_id === eid && r.member_id === S.me.id);
+  const rol = S.rolSel[eid] ?? mine?.rol ?? null;
+  if (estat !== "no" && !rol) return alert("Primer tria com a vindries: Diable, Tabaler/a, Staff, Grifó o Grifó staff.");
   const { error } = await sb.from("colla_rsvp").upsert({ event_id:eid, member_id:S.me.id,
     nom:(S.me.nom + " " + S.me.cognoms), estat, rol: estat === "no" ? null : rol },
     { onConflict:"event_id,member_id" });
   if (error) return alert("No s'ha pogut desar la resposta: " + error.message);
+  delete S.rolSel[eid];
   await loadRsvp(); renderAll();
 }
 
@@ -436,6 +445,7 @@ function renderEvents(){
     const n = S.rsvp.filter(r => r.event_id === e.id && r.estat === "no");
     const mine = S.me ? S.rsvp.find(r => r.event_id === e.id && r.member_id === S.me.id) : null;
     const est = mine ? mine.estat : "";
+    const rolActual = S.rolSel[e.id] ?? mine?.rol ?? "";
     return `
     <div class="card ev">
       <div class="row" style="justify-content:space-between">
@@ -446,19 +456,19 @@ function renderEvents(){
       <div class="muted">📅 ${esc(e.data) || "—"} · Quedada: ${esc(e.hora_quedada?.slice(0,5)) || "—"} · Inici: ${esc(e.hora_inici) || "—"}</div>
       <div style="margin:6px 0">📍 Lloc de quedada: ${link(e.quedada, e.quedada_url)}<br>🏟️ Lloc: ${link(e.lloc, e.lloc_url)}</div>
       <div class="muted">Vindran: <strong>${v.length}</strong> · Potser: <strong>${p.length}</strong> · No vindran: <strong>${n.length}</strong></div>
-      ${S.me && S.me.aprovat ? `
+      ${S.me ? `
       <div class="rsvp">
-        <div class="row"><strong>Vindràs?</strong>
-          ${[["vindre","Vindré"],["potser","Potser"],["no","No vindré"]].map(([val,l]) => `<label class="chk"><input type="radio" name="est-${e.id}" value="${val}" ${est === val ? "checked" : ""}> ${l}</label>`).join("")}
+        <strong>1. Com a:</strong>
+        <div class="row" style="margin-top:6px">
+          ${ROLS.map(o => `<button type="button" class="chip ${rolActual === o ? "on" : ""}" onclick="setRol('${e.id}','${esc(o)}')">${esc(o)}</button>`).join("")}
         </div>
-        <div class="row" style="margin-top:6px"><span class="muted">Vindré / potser com a:</span>
-          <select id="rs-${e.id}" style="max-width:260px">
-            ${ROLS.map(o => `<option ${mine?.rol === o ? "selected" : ""}>${esc(o)}</option>`).join("")}
-          </select>
-          <button class="primary" onclick="rsvp('${e.id}')">Desar</button>
+        <strong style="display:block;margin-top:12px">2. Vindràs?</strong>
+        <div class="row" style="margin-top:6px">
+          <button type="button" class="resp ${est === "vindre" ? "on" : ""}" onclick="rsvp('${e.id}','vindre')">✅ VINDRÉ</button>
+          <button type="button" class="resp ${est === "potser" ? "on" : ""}" onclick="rsvp('${e.id}','potser')">🤔 POTSER</button>
+          <button type="button" class="resp ${est === "no" ? "on" : ""}" onclick="rsvp('${e.id}','no')">❌ NO VINDRÉ</button>
         </div>
-      </div>` : S.me ? `<p class="muted" style="margin-top:8px">Podràs respondre quan l'administració aprovi la teva inscripció.</p>`
-        : `<p class="muted" style="margin-top:8px"><a href="#" onclick="go('c');return false">Inicia sessió</a> per confirmar si vindràs.</p>`}
+      </div>` : `<p class="muted" style="margin-top:8px"><a href="#" onclick="go('c');return false">Inicia sessió</a> per confirmar si vindràs.</p>`}
     </div>`;
   }).join("") : "<p class='muted'>Encara no hi ha esdeveniments.</p>";
 }
@@ -546,8 +556,7 @@ function renderAll(){
   if (!S.user) $("reg-box").classList.add("hidden");
   if (S.user) {
     $("who").textContent = S.me ? (S.me.nom + " " + S.me.cognoms) : S.user.email;
-    $("pending").classList.toggle("hidden", !!(S.me && S.me.aprovat));
-    $("foto-box").classList.toggle("hidden", !(S.me && S.me.aprovat));
+    $("foto-box").classList.toggle("hidden", !S.me);
     const f = S.fotos[S.me?.id];
     $("foto-prev").src = f ? fotoUrl(S.me.id) : "";
   }
